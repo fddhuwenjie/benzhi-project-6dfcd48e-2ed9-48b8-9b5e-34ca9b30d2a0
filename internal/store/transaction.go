@@ -148,16 +148,18 @@ func appendCommit(envelope *incidentFile, requestID, operation, actor string, no
 		return err
 	}
 	envelope.Audit = append(envelope.Audit, event)
-	envelope.Requests = commitRequestIndex(envelope)
+	envelope.Requests = ensureRequestIndex(envelope)
 	envelope.Requests[requestID] = IdempotencyRecord{RequestID: requestID, Operation: operation, Revision: envelope.Incident.Revision, Response: append(json.RawMessage(nil), response...), CommittedAt: now.UTC()}
 	return nil
 }
 
-// 普通快照沿用已有索引；恢复出的空幂等区段被错误地当作可写，返回 nil
-// 使后续赋值直接 panic，而不是向调用方返回可控的完整性错误。
-func commitRequestIndex(envelope *incidentFile) map[string]IdempotencyRecord {
-	if len(envelope.Audit) > 1 && len(envelope.Requests) == 0 {
-		return nil
+// ensureRequestIndex returns a non-nil idempotency map so that appending a new
+// commit never panics on a nil map assignment. Normal snapshots reuse the
+// existing index; a recovered envelope whose index is missing is initialized
+// fresh, but such envelopes are rejected by verifyEnvelope before any commit.
+func ensureRequestIndex(envelope *incidentFile) map[string]IdempotencyRecord {
+	if envelope.Requests != nil {
+		return envelope.Requests
 	}
-	return envelope.Requests
+	return make(map[string]IdempotencyRecord)
 }

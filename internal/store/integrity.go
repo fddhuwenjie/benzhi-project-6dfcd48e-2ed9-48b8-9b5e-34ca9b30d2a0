@@ -13,6 +13,24 @@ func verifyEnvelope(envelope *incidentFile) error {
 	if envelope.Incident == nil {
 		return integrityError("聚合缺失")
 	}
+	if envelope.Requests == nil {
+		return integrityError("幂等索引缺失")
+	}
+	if len(envelope.Requests) != len(envelope.Audit) {
+		return integrityError("幂等索引与审计链数量不一致")
+	}
+	for index, event := range envelope.Audit {
+		record, ok := envelope.Requests[event.RequestID]
+		if !ok {
+			return integrityError("幂等索引缺少审计提交记录")
+		}
+		if record.RequestID != event.RequestID || record.Operation != event.Operation || record.Revision != event.Revision {
+			return integrityError("幂等索引与审计提交记录不一致")
+		}
+		if record.Revision != int64(index+1) {
+			return integrityError("幂等索引修订与审计序号不一致")
+		}
+	}
 	if len(envelope.Audit) == 0 {
 		return integrityError("审计链为空")
 	}
