@@ -124,5 +124,17 @@ func (s *Store) writeUnlocked(id string, envelope *incidentFile) error {
 	if err := directory.Sync(); err != nil {
 		return fmt.Errorf("同步数据目录: %w", err)
 	}
+	s.invalidateTimelineCache(id)
 	return nil
+}
+
+// invalidateTimelineCache drops the cached audit timeline for an incident so
+// that subsequent Timeline queries rebuild it from the freshly committed audit
+// chain. Callers must hold the per-incident lock (the same lock that protects
+// writeUnlocked) to preserve the lock ordering used by Timeline
+// (incident lock acquired before timelineMu).
+func (s *Store) invalidateTimelineCache(id string) {
+	s.timelineMu.Lock()
+	defer s.timelineMu.Unlock()
+	delete(s.timelineCache, id)
 }
